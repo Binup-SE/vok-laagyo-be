@@ -1,24 +1,26 @@
-"""Shared model bases — adapted from reg1-database-manager Base patterns.
+"""Shared model bases — same layout as reg1-database-manager/api/models/base.py.
 
-Differences for Vok:
+Postgres adaptations:
 - UUID primary keys (not autoincrement ints)
-- timestamptz created_at (not MySQL ON UPDATE)
-- TenantScopedMixin for row-level tenant_id (shared schema)
+- timestamptz + SQLAlchemy onupdate (not MySQL ON UPDATE CURRENT_TIMESTAMP)
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, func
+from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.extensions import db
 
 
-class UUIDPrimaryKeyMixin:
+class Base(db.Model):
+    __abstract__ = True
+
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
@@ -26,17 +28,16 @@ class UUIDPrimaryKeyMixin:
     )
 
 
-class TimestampMixin:
-    created_at: Mapped[datetime] = mapped_column(
+class DateTimeBase(db.Model):
+    __abstract__ = True
+
+    date_added: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
         default=lambda: datetime.now(timezone.utc),
     )
-
-
-class UpdatedAtMixin:
-    updated_at: Mapped[datetime] = mapped_column(
+    date_updated: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
@@ -45,24 +46,16 @@ class UpdatedAtMixin:
     )
 
 
-class TenantScopedMixin:
-    """Every tenant-owned business table should include this."""
+class BaseModel(Base, DateTimeBase):
+    __abstract__ = True
 
-    tenant_id: Mapped[uuid.UUID] = mapped_column(
+    added_by: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("tenants.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
-
-
-class BaseModel(UUIDPrimaryKeyMixin, TimestampMixin, db.Model):
-    """UUID + created_at. Use for platform tables (tenants, users, …)."""
-
-    __abstract__ = True
-
-
-class TenantBaseModel(UUIDPrimaryKeyMixin, TimestampMixin, TenantScopedMixin, db.Model):
-    """UUID + created_at + tenant_id. Use for menus, items, settings, …"""
-
-    __abstract__ = True
+    updated_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+    )

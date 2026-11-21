@@ -1,12 +1,12 @@
+from __future__ import annotations
+
 from flask import Flask
 
 from app.api import api_bp
-from app.common.db import reset_local_tenant_id, set_local_tenant_id
 from app.common.exceptions import AppError
 from app.common.response import Response
 from app.config import Config
 from app.extensions import db, migrate
-from app.middleware import register_tenant_middleware
 
 
 def create_app(config_object: type[Config] | Config | None = None) -> Flask:
@@ -30,7 +30,6 @@ def create_app(config_object: type[Config] | Config | None = None) -> Flask:
     from app import models  # noqa: F401
 
     app.register_blueprint(api_bp, url_prefix="/api/v1")
-    register_tenant_middleware(app)
     _register_error_handlers(app)
     _register_db_hooks(app)
 
@@ -56,17 +55,6 @@ def _register_error_handlers(app: Flask) -> None:
 
 
 def _register_db_hooks(app: Flask) -> None:
-    @app.before_request
-    def _apply_tenant_guc():
-        from flask import g, request
-
-        if not request.path.startswith("/api/"):
-            return
-        tenant = getattr(g, "tenant", None)
-        if tenant is not None:
-            set_local_tenant_id(tenant.id)
-
     @app.teardown_request
     def _cleanup_db(exc=None):
-        reset_local_tenant_id()
         db.session.remove()
